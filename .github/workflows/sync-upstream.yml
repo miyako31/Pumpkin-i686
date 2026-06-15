@@ -31,6 +31,9 @@ jobs:
 
       - name: Sync upstream
         id: sync
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_BUILD: ${{ github.event.inputs.force_build }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -40,8 +43,8 @@ jobs:
           UPSTREAM=$(git rev-parse upstream/master)
           if [ "$LOCAL" = "$UPSTREAM" ]; then
             echo "Already up to date."
-            # Only build if explicitly triggered manually with force_build=true
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force_build }}" = "true" ]; then
+            if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$FORCE_BUILD" = "true" ]; then
+              echo "Force build requested."
               echo "updated=true" >> $GITHUB_OUTPUT
             else
               echo "updated=false" >> $GITHUB_OUTPUT
