@@ -1,0 +1,110 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if already up to date'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync with upstream
+    runs-on: ubuntu-latest
+    outputs:
+      updated: ${{ steps.sync.outputs.updated }}
+      sha: ${{ steps.sync.outputs.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync upstream
+        id: sync
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_BUILD: ${{ github.event.inputs.force_build }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Pumpkin-MC/Pumpkin.git || true
+          git fetch upstream master
+
+          UPSTREAM=$(git rev-parse upstream/master)
+          LOCAL_UPSTREAM=$(git rev-parse HEAD)
+
+          # Save our workflow files before reset
+          cp -r .github/workflows /tmp/my-workflows
+
+          # Hard reset master to upstream
+          git reset --hard upstream/master
+
+          # Restore our workflow files
+          mkdir -p .github/workflows
+          cp /tmp/my-workflows/*.yml .github/workflows/
+
+          NEW_HEAD=$(git rev-parse HEAD)
+
+          if [ "$LOCAL_UPSTREAM" = "$UPSTREAM" ] && git diff --quiet HEAD; then
+            echo "Already up to date."
+            if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$FORCE_BUILD" = "true" ]; then
+              echo "Force build requested."
+              echo "updated=true" >> $GITHUB_OUTPUT
+            else
+              echo "updated=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Commit workflow files if they differ from upstream
+            git add .github/workflows/
+            git diff --cached --quiet || git commit -m "chore: restore custom workflow files"
+            git push origin master --force
+            echo "updated=true" >> $GITHUB_OUTPUT
+          fi
+          echo "sha=$(git rev-parse --short upstream/master)" >> $GITHUB_OUTPUT
+
+  build-and-release:
+    name: Build and Release (i686-unknown-linux-gnu)
+    needs: sync
+    if: needs.sync.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: i686-unknown-linux-gnu
+
+      - name: Build (release)
+        run: cross build --release --target i686-unknown-linux-gnu
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=${{ needs.sync.outputs.sha }}
+          TAG="build-${SHA}-$(date +%Y%m%d%H%M%S)"
+          gh release create "$TAG" \
+            target/i686-unknown-linux-gnu/release/pumpkin \
+            --title "Pumpkin i386 build (${SHA})" \
+            --notes "Automated i386 build from upstream commit ${SHA}." \
+            --latest
