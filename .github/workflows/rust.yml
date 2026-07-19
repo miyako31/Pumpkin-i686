@@ -1,7 +1,6 @@
 name: Cargo Build, Test, and Linting
 
 on:
-  push:
   pull_request:
   workflow_dispatch:
 
@@ -18,7 +17,7 @@ jobs:
         toolchain:
           - stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
@@ -34,7 +33,7 @@ jobs:
         toolchain:
           - stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
@@ -48,7 +47,7 @@ jobs:
         toolchain:
           - stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
@@ -65,7 +64,7 @@ jobs:
         toolchain:
           - stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
@@ -84,14 +83,13 @@ jobs:
             ubuntu-latest,
             ubuntu-24.04-arm,
             windows-latest,
-            windows-11-arm,
             macos-latest,
             macos-15-intel,
           ]
         toolchain:
           - stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
@@ -112,60 +110,31 @@ jobs:
             ubuntu-latest,
             ubuntu-24.04-arm,
             windows-latest,
-            windows-11-arm,
             macos-latest,
             macos-15-intel,
           ]
         toolchain:
           - stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@v2
-      
       - name: Build Release
         shell: bash
         run: |
+          if [[ "${{ runner.arch }}" == "X64" ]]; then
+            export RUSTFLAGS="$RUSTFLAGS -C target-cpu=x86-64-v3"
+          fi
           cargo build --verbose --release
-          
       - name: Prepare artifacts
         shell: bash
         run: |
           mkdir -p dist
           if [ "${{ runner.os }}" == "Windows" ]; then EXT=".exe"; fi
           cp "target/release/pumpkin$EXT" "dist/pumpkin-${{ runner.arch }}-${{ runner.os }}$EXT"
-
-      - name: Upload unsigned executable for SignPath (Windows only)
-        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/master'
-        id: upload_unsigned
-        uses: actions/upload-artifact@v7
-        with:
-          name: unsigned-${{ runner.arch }}-${{ runner.os }}
-          path: dist/pumpkin-*
-          retention-days: 1
-
-      - name: Submit SignPath signing request (Windows only)
-        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '${{ secrets.SIGNPATH_ORGANIZATION_ID }}'
-          project-slug: '${{ secrets.SIGNPATH_PROJECT_SLUG }}'
-          signing-policy-slug: '${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}'
-          github-artifact-id: '${{ steps.upload_unsigned.outputs.artifact-id }}'
-          wait-for-completion: true
-          output-artifact-directory: dist/signed/
-
-      - name: Overwrite with signed version (Windows only)
-        if: runner.os == 'Windows' && github.event_name == 'push' && github.ref == 'refs/heads/master'
-        shell: bash
-        run: |
-          cp dist/signed/* dist/
-          rm -rf dist/signed/
-
       - name: Export executable
         uses: actions/upload-artifact@v7
         with:
@@ -179,7 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Download prebuilt binary artifacts
