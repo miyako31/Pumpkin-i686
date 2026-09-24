@@ -1,0 +1,36 @@
+name: Build i386
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (i686-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true   # Required for pumpkin-plugin-wit submodule
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: i686-unknown-linux-gnu
+
+      - name: Build (release)
+        run: cross build --release --target i686-unknown-linux-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pumpkin-i386-linux
+          path: target/i686-unknown-linux-gnu/release/pumpkin
+          if-no-files-found: error
+          retention-days: 30
